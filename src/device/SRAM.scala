@@ -20,9 +20,9 @@ class SRAMHelper extends BlackBox with HasBlackBoxInline {
       |  input ren,
       |  output reg [31:0] rdata
       |);
-      |import "DPI-C" function void sram_read(input int raddr, output int rdata);
+      |import "DPI-C" function void dpi_sram_read(input int raddr, output int rdata);
       |always @(*) begin
-      |  if (ren) sram_read(raddr, rdata);
+      |  if (ren) dpi_sram_read(raddr, rdata);
       |  else rdata = 0;
       |end
       |endmodule

@@ -35,7 +35,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lsram = LazyModule(new AXI4SRAM(AddressSet.misaligned(0x80000000L, 0x1000)))
 
   List(luart.node).map(_ := apbxbar)
-  List(apbxbar := APBDelayer() := AXI4ToAPB(), lsram.node).map(_ := xbar2)
+  List(apbxbar := AXI4ToAPB(), lsram.node).map(_ := xbar2)
   xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
   xbar := cpu.masterNode
 
