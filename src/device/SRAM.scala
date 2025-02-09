@@ -11,19 +11,31 @@ import freechips.rocketchip.util._
 class SRAMHelper extends BlackBox with HasBlackBoxInline {
   val io = IO(new Bundle {
     val raddr = Input(UInt(32.W))
-    val ren = Input(Bool())
+    val ren   = Input(Bool())
     val rdata = Output(UInt(32.W))
+    // 新增写端口
+    val waddr = Input(UInt(32.W))
+    val wen   = Input(Bool())
+    val wdata = Input(UInt(32.W))
   })
   setInline("SRAMHelper.v",
     """module SRAMHelper(
       |  input [31:0] raddr,
       |  input ren,
-      |  output reg [31:0] rdata
+      |  output reg [31:0] rdata,
+      |  input [31:0] waddr,
+      |  input wen,
+      |  input [31:0] wdata
       |);
       |import "DPI-C" function void dpi_sram_read(input int raddr, output int rdata);
+      |import "DPI-C" function void dpi_sram_write(input int waddr, input int wdata);
       |always @(*) begin
-      |  if (ren) dpi_sram_read(raddr, rdata);
-      |  else rdata = 0;
+      |  if (wen)
+      |    dpi_sram_write(waddr, wdata);
+      |  if (ren)
+      |    dpi_sram_read(raddr, rdata);
+      |  else
+      |    rdata = 0;
       |end
       |endmodule
     """.stripMargin)
@@ -35,7 +47,7 @@ class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
     Seq(AXI4SlaveParameters(
         address       = address,
         executable    = true,
-        supportsWrite = TransferSizes.none,
+        supportsWrite = TransferSizes(1, beatBytes),
         supportsRead  = TransferSizes(1, beatBytes),
         interleavedId = Some(0))
     ),
@@ -47,6 +59,7 @@ class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
 
     val sram = Module(new SRAMHelper)
 
+    // 读通道
     val (stateIdle, stateWaitRready) = (0.U, 1.U)
     val state = RegInit(stateIdle)
     state := Mux(state === stateIdle,
@@ -64,11 +77,19 @@ class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
     in.r.bits.last := true.B
     in.r.valid := (state === stateWaitRready)
 
-    in.aw.ready := false.B
-    in. w.ready := false.B
-    in. b.valid := false.B
+    // 写通道
+    val (wIdle, wWaitB) = (0.U, 1.U)
+    val wState = RegInit(wIdle)
+    wState := Mux(wState === wIdle,
+                  Mux(in.aw.fire && in.w.fire, wWaitB, wIdle),
+                  Mux(in.b.fire, wIdle, wWaitB))
 
-    assert(!in.aw.valid, "do not support write operations")
-    assert(!in. w.valid, "do not support write operations")
+    in.aw.ready := (wState === wIdle)
+    in.w.ready  := (wState === wIdle)
+    in.b.valid  := (wState === wWaitB)
+
+    sram.io.waddr := in.aw.bits.addr
+    sram.io.wdata := in.w.bits.data
+    sram.io.wen   := in.aw.fire && in.w.fire
   }
 }
