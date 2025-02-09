@@ -34,6 +34,7 @@
               pkgs.gnumake
               pkgs.jdk11
               pkgs.mill
+              pkgs.metals
             ];
 
             shellHook = ''
