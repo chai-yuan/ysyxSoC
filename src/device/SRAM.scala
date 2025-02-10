@@ -11,47 +11,59 @@ import freechips.rocketchip.util._
 class SRAMHelper extends BlackBox with HasBlackBoxInline {
   val io = IO(new Bundle {
     val raddr = Input(UInt(32.W))
-    val ren   = Input(Bool())
+    val ren = Input(Bool())
     val rdata = Output(UInt(32.W))
     // 新增写端口
     val waddr = Input(UInt(32.W))
-    val wen   = Input(Bool())
+    val wen = Input(Bool())
+    val wmask = Input(UInt(4.W))
     val wdata = Input(UInt(32.W))
   })
-  setInline("SRAMHelper.v",
+  setInline(
+    "SRAMHelper.v",
     """module SRAMHelper(
       |  input [31:0] raddr,
       |  input ren,
       |  output reg [31:0] rdata,
       |  input [31:0] waddr,
       |  input wen,
+      |  input [3:0] wmask,
       |  input [31:0] wdata
       |);
       |import "DPI-C" function void dpi_sram_read(input int raddr, output int rdata);
-      |import "DPI-C" function void dpi_sram_write(input int waddr, input int wdata);
+      |import "DPI-C" function void dpi_sram_write(input int waddr,input int wmask, input int wdata);
       |always @(*) begin
       |  if (wen)
-      |    dpi_sram_write(waddr, wdata);
+      |    dpi_sram_write(waddr, wmask, wdata);
       |  if (ren)
       |    dpi_sram_read(raddr, rdata);
       |  else
       |    rdata = 0;
       |end
       |endmodule
-    """.stripMargin)
+    """.stripMargin
+  )
 }
 
-class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyModule {
+class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters)
+    extends LazyModule {
   val beatBytes = 4
-  val node = AXI4SlaveNode(Seq(AXI4SlavePortParameters(
-    Seq(AXI4SlaveParameters(
-        address       = address,
-        executable    = true,
-        supportsWrite = TransferSizes(1, beatBytes),
-        supportsRead  = TransferSizes(1, beatBytes),
-        interleavedId = Some(0))
-    ),
-    beatBytes  = beatBytes)))
+  val node = AXI4SlaveNode(
+    Seq(
+      AXI4SlavePortParameters(
+        Seq(
+          AXI4SlaveParameters(
+            address = address,
+            executable = true,
+            supportsWrite = TransferSizes(1, beatBytes),
+            supportsRead = TransferSizes(1, beatBytes),
+            interleavedId = Some(0)
+          )
+        ),
+        beatBytes = beatBytes
+      )
+    )
+  )
 
   lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
@@ -62,9 +74,11 @@ class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
     // 读通道
     val (stateIdle, stateWaitRready) = (0.U, 1.U)
     val state = RegInit(stateIdle)
-    state := Mux(state === stateIdle,
-               Mux(in.ar.fire, stateWaitRready, stateIdle),
-               Mux(in. r.fire, stateIdle, stateWaitRready))
+    state := Mux(
+      state === stateIdle,
+      Mux(in.ar.fire, stateWaitRready, stateIdle),
+      Mux(in.r.fire, stateIdle, stateWaitRready)
+    )
 
     sram.io.raddr := in.ar.bits.addr
     sram.io.ren := in.ar.fire
@@ -78,18 +92,37 @@ class AXI4SRAM(address: Seq[AddressSet])(implicit p: Parameters) extends LazyMod
     in.r.valid := (state === stateWaitRready)
 
     // 写通道
-    val (wIdle, wWaitB) = (0.U, 1.U)
+    val (wIdle, wWaitA, wWaitB) = (0.U, 1.U, 2.U)
     val wState = RegInit(wIdle)
-    wState := Mux(wState === wIdle,
-                  Mux(in.aw.fire && in.w.fire, wWaitB, wIdle),
-                  Mux(in.b.fire, wIdle, wWaitB))
+    val wAddr = Reg(UInt(32.W))
+
+    switch(wState) {
+      is(wIdle) {
+        when(in.aw.fire && in.w.fire) { wState := wWaitB }
+          .elsewhen(in.aw.fire) {
+            wState := wWaitA
+            wAddr := in.aw.bits.addr
+          }
+      }
+      is(wWaitA) {
+        when(in.w.fire) {
+          wState := wWaitB
+        }
+      }
+      is(wWaitB) {
+        when(in.b.fire) {
+          wState := wIdle
+        }
+      }
+    }
 
     in.aw.ready := (wState === wIdle)
-    in.w.ready  := (wState === wIdle)
-    in.b.valid  := (wState === wWaitB)
+    in.w.ready := (wState === wIdle) || (wState === wWaitA)
+    in.b.valid := (wState === wWaitB)
 
-    sram.io.waddr := in.aw.bits.addr
+    sram.io.waddr := Mux(wState === wIdle, in.aw.bits.addr, wAddr)
+    sram.io.wmask := in.w.bits.strb
     sram.io.wdata := in.w.bits.data
-    sram.io.wen   := in.aw.fire && in.w.fire
+    sram.io.wen := (in.aw.fire && in.w.fire) || (in.w.fire && wState === wWaitA)
   }
 }
