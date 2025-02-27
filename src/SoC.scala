@@ -25,7 +25,6 @@ object AXI4SlaveNodeGenerator {
 
 class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val xbar = AXI4Xbar()
-  val xbar2 = AXI4Xbar()
   val apbxbar = LazyModule(new APBFanout).node
   val cpu = LazyModule(new CPU(idBits = ChipLinkParam.idBits))
   val chipMaster = None
@@ -35,8 +34,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lsram = LazyModule(new AXI4SRAM(AddressSet.misaligned(0x80000000L, 0x1000)))
 
   List(luart.node).map(_ := apbxbar)
-  List(apbxbar := AXI4ToAPB(), lsram.node).map(_ := xbar2)
-  xbar2 := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := xbar
+  List(apbxbar := AXI4ToAPB(), lsram.node).map(_ := xbar)
   xbar := cpu.masterNode
 
   override lazy val module = new Impl
