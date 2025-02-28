@@ -44,7 +44,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     cpu.module.reset := SynchronizerShiftReg(reset.asBool, 10) || reset.asBool
 
     val fpga_io = None
-    cpu.module.slave := DontCare
 
     // connect interrupt signal to cpu
     val intr_from_chipSlave = IO(Input(Bool()))
