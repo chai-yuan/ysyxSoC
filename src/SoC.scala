@@ -12,15 +12,26 @@ import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.system.SimAXIMem
 
 object AXI4SlaveNodeGenerator {
-  def apply(params: Option[MasterPortParams], address: Seq[AddressSet])(implicit valName: ValName) =
-    AXI4SlaveNode(params.map(p => AXI4SlavePortParameters(
-        slaves = Seq(AXI4SlaveParameters(
-          address       = address,
-          executable    = p.executable,
-          supportsWrite = TransferSizes(1, p.maxXferBytes),
-          supportsRead  = TransferSizes(1, p.maxXferBytes))),
-        beatBytes = p.beatBytes
-      )).toSeq)
+  def apply(params: Option[MasterPortParams], address: Seq[AddressSet])(implicit
+      valName: ValName
+  ) =
+    AXI4SlaveNode(
+      params
+        .map(p =>
+          AXI4SlavePortParameters(
+            slaves = Seq(
+              AXI4SlaveParameters(
+                address = address,
+                executable = p.executable,
+                supportsWrite = TransferSizes(1, p.maxXferBytes),
+                supportsRead = TransferSizes(1, p.maxXferBytes)
+              )
+            ),
+            beatBytes = p.beatBytes
+          )
+        )
+        .toSeq
+    )
 }
 
 class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
@@ -30,11 +41,18 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val chipMaster = None
   val chiplinkNode = None
 
-  val luart = LazyModule(new APBUart16550(AddressSet.misaligned(0x10000000, 0x1000)))
-  val lsram = LazyModule(new AXI4SRAM(AddressSet.misaligned(0x80000000L, 0x1000)))
+  val luart = LazyModule(
+    new APBUart16550(AddressSet.misaligned(0x10000000, 0x1000))
+  )
+  val lflash = LazyModule(
+    new AXI4SimulatFlash(AddressSet.misaligned(0x40000000L, 0x10000000))
+  )
+  val lsram = LazyModule(
+    new AXI4SRAM(AddressSet.misaligned(0x80000000L, 0x10000000))
+  )
 
   List(luart.node).map(_ := apbxbar)
-  List(apbxbar := AXI4ToAPB(), lsram.node).map(_ := xbar)
+  List(apbxbar := AXI4ToAPB(), lsram.node, lflash.node).map(_ := xbar)
   xbar := cpu.masterNode
 
   override lazy val module = new Impl
@@ -57,7 +75,6 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
 
 class ysyxSoCFPGA(implicit p: Parameters) extends ChipLinkSlave
 
-
 class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
   val asic = LazyModule(new ysyxSoCASIC)
   ElaborationArtefacts.add("graphml", graphML)
@@ -68,7 +85,7 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
 
     masic.intr_from_chipSlave := false.B
 
-    val externalPins = IO(new Bundle{
+    val externalPins = IO(new Bundle {
       val uart = chiselTypeOf(masic.uart)
     })
     externalPins.uart <> masic.uart
