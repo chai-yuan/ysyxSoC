@@ -29,16 +29,18 @@ class ysyxSoCFPGA extends Module {
 
   val io = IO(new Bundle {
     val uart = new UARTIO
+    val gpio = new GPIOIO
   })
   val dut = LazyModule(new ysyxSoCASIC)
   val mdut = Module(dut.module)
   mdut.dontTouchPorts()
-  mdut.uart <> io.uart
   mdut.intr_from_chipSlave := false.B
+  mdut.uart <> io.uart
+  mdut.gpio <> io.gpio
 }
 
 object Elaborate extends App {
-  val firtoolOptions = Array("--disable-annotation-unknown")
+  val firtoolOptions = Array("-disable-all-randomization", "-strip-debug-info")
   circt.stage.ChiselStage.emitSystemVerilogFile(
     new ysyxSoCFPGA,
     args,

@@ -9,9 +9,10 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 class GPIOIO extends Bundle {
-  val out = Output(UInt(16.W))
-  val in = Input(UInt(16.W))
-  val seg = Output(Vec(8, UInt(8.W)))
+  val out = Output(UInt(8.W))
+  val in = Input(UInt(8.W))
+  val seg = Output(UInt(8.W))
+  val segSelect = Output(UInt(6.W))
 }
 
 class GPIOCtrlIO extends Bundle {
