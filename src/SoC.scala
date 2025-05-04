@@ -47,12 +47,15 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val lgpio = LazyModule(
     new APBGPIO(AddressSet.misaligned(0x10002000, 0x10))
   )
+  val lbram = LazyModule(
+    new AXI4BRAM(AddressSet.misaligned(0x20000000L, 0x1000000))
+  )
   val lsram = LazyModule(
-    new AXI4SRAM(AddressSet.misaligned(0x80000000L, 0x1000000))
+    new APBSRAM(AddressSet.misaligned(0x80000000L, 0x1000000))
   )
 
-  List(luart.node, lgpio.node).map(_ := apbxbar)
-  List(apbxbar := AXI4ToAPB(), lsram.node).map(_ := xbar)
+  List(luart.node, lgpio.node, lsram.node).map(_ := apbxbar)
+  List(apbxbar := AXI4ToAPB(), lbram.node).map(_ := xbar)
   xbar := cpu.masterNode
 
   override lazy val module = new Impl
@@ -70,8 +73,10 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
     // expose slave I/O interface as ports
     val uart = IO(chiselTypeOf(luart.module.uart))
     val gpio = IO(chiselTypeOf(lgpio.module.gpio_bundle))
+    val sram = IO(chiselTypeOf(lsram.module.sram_bundle))
     uart <> luart.module.uart
     gpio <> lgpio.module.gpio_bundle
+    sram <> lsram.module.sram_bundle
   }
 }
 
@@ -88,8 +93,10 @@ class ysyxSoCFull(implicit p: Parameters) extends LazyModule {
     val externalPins = IO(new Bundle {
       val uart = chiselTypeOf(masic.uart)
       val gpio = chiselTypeOf(masic.gpio)
+      val sram = chiselTypeOf(masic.sram)
     })
     externalPins.uart <> masic.uart
     externalPins.gpio <> masic.gpio
+    externalPins.sram <> masic.sram
   }
 }

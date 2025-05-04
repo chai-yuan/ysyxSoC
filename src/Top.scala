@@ -30,6 +30,7 @@ class ysyxSoCFPGA extends Module {
   val io = IO(new Bundle {
     val uart = new UARTIO
     val gpio = new GPIOIO
+    val sram = new SRAMIO
   })
   val dut = LazyModule(new ysyxSoCASIC)
   val mdut = Module(dut.module)
@@ -37,6 +38,7 @@ class ysyxSoCFPGA extends Module {
   mdut.intr_from_chipSlave := false.B
   mdut.uart <> io.uart
   mdut.gpio <> io.gpio
+  mdut.sram <> io.sram
 }
 
 object Elaborate extends App {
